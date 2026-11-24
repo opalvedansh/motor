@@ -1,0 +1,20 @@
+[Unit]
+Description=Motor Bench web HMI
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+WorkingDirectory=/opt/motorbench
+ExecStart=/opt/motorbench/MotorBench.Web
+# runs as a throwaway user; /var/lib/motorbench is created for it and kept across restarts
+DynamicUser=yes
+StateDirectory=motorbench
+Environment=DataDir=/var/lib/motorbench
+Restart=on-failure
+RestartSec=5
+# on stop the HMI brings a running motor to standstill first (up to 10 s)
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target

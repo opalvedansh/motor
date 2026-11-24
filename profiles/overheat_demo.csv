@@ -1,0 +1,5 @@
+# Full load at full speed until the motor over-temperature alarm trips
+# (about 40-50 s into step 2). The sequence is aborted and the bench stops.
+speed_rpm,load_pct,dwell_s
+1500,50,5
+3000,100,120

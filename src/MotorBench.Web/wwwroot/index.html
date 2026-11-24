@@ -1,0 +1,430 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Motor Bench HMI</title>
+<style>
+  :root {
+    --bg: #f4f5f7; --panel: #fff; --text: #1b1f24; --muted: #66707c; --line: #d9dde3;
+    --run: #1f9d55; --fault: #d93025; --warn: #e08a00; --speed: #2563eb; --temp: #c2410c; --sp: #94a3b8;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #111418; --panel: #1a1e24; --text: #e6e9ed; --muted: #8b95a1; --line: #2c323a;
+      --run: #34c776; --fault: #ff5a4f; --warn: #f5a524; --speed: #60a5fa; --temp: #fb923c; --sp: #64748b;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.4 system-ui, sans-serif; }
+  main { max-width: 1180px; margin: 0 auto; padding: 16px; display: grid; gap: 12px; }
+  footer { max-width: 1180px; margin: 0 auto; padding: 0 16px 16px; font-size: 12px; }
+  header { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; }
+  h1 { font-size: 18px; margin: 0; }
+  h2 { font-size: 13px; margin: 0 0 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; font-weight: 600; }
+  .muted { color: var(--muted); }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px; min-width: 0; }
+  .banner { padding: 10px 14px; border-radius: 8px; color: #fff; background: var(--fault); display: none; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+  .tile .value { font-size: 28px; font-variant-numeric: tabular-nums; font-weight: 600; }
+  .tile .unit { font-size: 14px; color: var(--muted); font-weight: 400; }
+  .lamps { display: flex; gap: 18px; flex-wrap: wrap; }
+  .lamp { display: flex; align-items: center; gap: 6px; }
+  .lamp i { width: 14px; height: 14px; border-radius: 50%; background: var(--line); }
+  .lamp.on i { background: var(--run); box-shadow: 0 0 8px var(--run); }
+  .lamp.fault.on i { background: var(--fault); box-shadow: 0 0 8px var(--fault); }
+  .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px; }
+  label { display: grid; gap: 4px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: end; }
+  input[type=number], select { padding: 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--text); font: inherit; }
+  input[type=number] { width: 100px; }
+  #inDut { width: 150px; padding: 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--text); font: inherit; }
+  td.ok { color: var(--run); } td.bad { color: var(--fault); }
+  td a + a { margin-left: 10px; }
+  table.runs th, table.runs td { text-align: left; }
+  select { max-width: 100%; }
+  button { padding: 8px 14px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--text); cursor: pointer; font: inherit; }
+  button:disabled { opacity: .45; cursor: default; }
+  button.start { background: var(--run); border-color: var(--run); color: #fff; }
+  button.stop { background: var(--fault); border-color: var(--fault); color: #fff; }
+  button.armed { background: var(--warn); border-color: var(--warn); color: #000; }
+  canvas { width: 100%; height: 220px; display: block; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+  .legend b { display: inline-block; width: 12px; height: 3px; vertical-align: middle; margin-right: 4px; }
+  #msg { min-height: 1.4em; color: var(--fault); }
+  .progress { height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; margin: 8px 0; }
+  .progress div { height: 100%; width: 0; background: var(--speed); transition: width .2s; }
+  .table-wrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+  th, td { text-align: right; padding: 5px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th { color: var(--muted); font-weight: 500; font-size: 12px; }
+  th:first-child, td:first-child { text-align: left; }
+  ul.alarms { list-style: none; margin: 0; padding: 0; max-height: 200px; overflow-y: auto; }
+  ul.alarms li { padding: 5px 0; border-bottom: 1px solid var(--line); display: flex; gap: 10px; }
+  ul.alarms .raised { color: var(--fault); font-weight: 600; }
+  ul.alarms .cleared { color: var(--run); }
+  a { color: var(--speed); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Motor Bench HMI</h1>
+    <span class="muted" id="conn">Connecting…</span>
+    <span class="row" style="align-items:center;margin-left:auto">
+      <span id="controlText" class="muted"></span>
+      <button id="btnControl" hidden>Take control</button>
+      <span id="who" class="muted"></span>
+      <button id="btnLogout" hidden>Log out</button>
+    </span>
+  </header>
+
+  <div class="banner" id="banner" role="alert"></div>
+
+  <section class="tiles">
+    <div class="panel tile"><h2>State</h2><div class="value" id="state">–</div></div>
+    <div class="panel tile"><h2>Speed</h2><div class="value"><span id="speed">–</span> <span class="unit">rpm</span></div><div class="muted">SP <span id="speedSp">–</span> rpm</div></div>
+    <div class="panel tile"><h2>Torque</h2><div class="value"><span id="torque">–</span> <span class="unit">N·m</span></div><div class="muted">Load SP <span id="loadSp">–</span> %</div></div>
+    <div class="panel tile"><h2>Motor temp</h2><div class="value"><span id="temp">–</span> <span class="unit">°C</span></div><div class="muted">Trips at 120 °C</div></div>
+  </section>
+
+  <section class="panel lamps" aria-label="PLC outputs">
+    <span class="lamp" id="driveEnable"><i></i>Drive enable</span>
+    <span class="lamp" id="brakeRelease"><i></i>Brake released</span>
+    <span class="lamp" id="runLamp"><i></i>Run lamp</span>
+    <span class="lamp fault" id="faultLamp"><i></i>Fault lamp</span>
+    <span class="muted" style="margin-left:auto">PLC heartbeat <span id="hb">–</span></span>
+  </section>
+
+  <section class="grid2">
+    <div class="panel">
+      <h2>Manual operation</h2>
+      <div class="row" style="margin-bottom:12px">
+        <label>Speed (rpm, 0–3000)<input type="number" id="inSpeed" min="0" max="3000" step="100" value="1500"></label>
+        <label>Load (%, 0–100)<input type="number" id="inLoad" min="0" max="100" step="10" value="30"></label>
+        <button id="btnSet" data-need="control" data-manual>Send</button>
+      </div>
+      <div class="row">
+        <button class="start" id="btnStart" data-need="control" data-manual>Start</button>
+        <button class="stop" id="btnStop" data-need="operator">Stop</button>
+        <button id="btnReset" data-need="control">Reset alarm</button>
+      </div>
+      <h2 style="margin-top:16px">Fault injection (simulation only)</h2>
+      <div class="row">
+        <button id="btnEstop" aria-pressed="false" data-need="engineer">E-stop</button>
+        <button id="btnRunaway" aria-pressed="false" data-need="engineer">Runaway drive</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Automatic test sequence</h2>
+      <div class="row" style="margin-bottom:8px">
+        <label style="flex:1;min-width:0">Profile<select id="profile"></select></label>
+        <label>DUT serial<input id="inDut" maxlength="40" placeholder="e.g. M-2026-0042" autocomplete="off" spellcheck="false"></label>
+        <button class="start" id="btnSeqStart" data-need="control">Run</button>
+        <button id="btnSeqHold" data-need="control">Hold</button>
+        <button class="stop" id="btnSeqAbort" data-need="operator">Abort</button>
+      </div>
+      <div id="seqText" class="muted">No sequence run yet.</div>
+      <div class="progress" aria-hidden="true"><div id="seqBar"></div></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Step</th><th>SP rpm</th><th>Load %</th><th>Settle s</th><th>Avg rpm</th><th>Avg N·m</th><th>Max °C</th></tr></thead>
+          <tbody id="results"></tbody>
+        </table>
+      </div>
+      <div id="report" style="margin-top:8px"></div>
+    </div>
+  </section>
+
+  <div id="msg" role="status"></div>
+
+  <section class="grid2">
+    <div class="panel">
+      <div class="row" style="justify-content:space-between;margin-bottom:6px">
+        <h2 style="margin:0">Trend, last 60 s</h2>
+        <span class="legend">
+          <span><b style="background:var(--speed)"></b>Speed</span>
+          <span><b style="background:var(--sp)"></b>Speed SP (0–3500 rpm)</span>
+          <span><b style="background:var(--temp)"></b>Temp (0–150 °C)</span>
+        </span>
+      </div>
+      <canvas id="chart"></canvas>
+    </div>
+    <div class="panel">
+      <h2>Alarm history</h2>
+      <ul class="alarms" id="alarms"><li class="muted">No alarms.</li></ul>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Run history</h2>
+    <div class="table-wrap">
+      <table class="runs">
+        <thead><tr><th>Finished</th><th>Profile</th><th>DUT serial</th><th>Operator</th><th>Steps</th><th>Outcome</th><th>Files</th></tr></thead>
+        <tbody id="runs"><tr><td class="muted" colspan="7">No runs yet.</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+<footer class="muted" id="version"></footer>
+
+<script>
+const $ = id => document.getElementById(id);
+const trend = []; // {t, speed, sp, temp}
+const alarmText = { EStop: 'E-stop', Overspeed: 'Overspeed', OverTemperature: 'Motor over-temperature', CommLoss: 'HMI comm loss (watchdog)' };
+const rank = { Viewer: 0, Operator: 1, Engineer: 2 };
+let estop = false, runaway = false, seq = null, me = null;
+
+// one id per tab: says which tab holds control, and blocks cross-site requests
+let clientId;
+try { clientId = sessionStorage.getItem('mb-client'); } catch {}
+if (!clientId) {
+  clientId = crypto.randomUUID();
+  try { sessionStorage.setItem('mb-client', clientId); } catch {}
+}
+const headers = { 'X-MotorBench-Client': clientId };
+
+async function api(path, body) {
+  const r = await fetch(path, body === undefined ? { headers } :
+    { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  if (r.status === 401) { location.href = '/login.html'; throw new Error('login required'); }
+  return r;
+}
+
+async function post(path, body) {
+  $('msg').textContent = '';
+  try {
+    const r = await api(path, body ?? {});
+    if (!r.ok) $('msg').textContent = r.status === 403 ? 'Your role is not allowed to do this.'
+      : (await r.json().catch(() => null))?.detail ?? `Error ${r.status}`;
+    return r.ok;
+  } catch { $('msg').textContent ||= 'Dashboard server not reachable'; return false; }
+}
+
+const sendSetpoints = () => post('/api/setpoints', { speedRpm: +$('inSpeed').value, loadPct: +$('inLoad').value });
+$('btnSet').onclick = sendSetpoints;
+$('btnStart').onclick = async () => { if (await sendSetpoints()) post('/api/start'); };
+$('btnStop').onclick = () => post('/api/stop');
+$('btnReset').onclick = () => post('/api/reset');
+$('btnEstop').onclick = async () => { if (await post('/api/sim/estop', { on: !estop })) estop = !estop; paintToggles(); };
+$('btnRunaway').onclick = async () => { if (await post('/api/sim/runaway', { on: !runaway })) runaway = !runaway; paintToggles(); };
+$('btnSeqStart').onclick = () => post('/api/sequence/start', { profile: $('profile').value, dutSerial: $('inDut').value.trim() });
+$('btnSeqHold').onclick = () => post(seq?.held ? '/api/sequence/resume' : '/api/sequence/hold');
+$('btnSeqAbort').onclick = () => post('/api/sequence/abort');
+$('btnControl').onclick = () => post($('btnControl').dataset.release ? '/api/control/release' : '/api/control/take');
+$('btnLogout').onclick = async () => { await post('/api/logout'); location.href = '/login.html'; };
+
+function paintToggles() {
+  for (const [id, on, txt] of [['btnEstop', estop, 'E-stop'], ['btnRunaway', runaway, 'Runaway drive']]) {
+    $(id).classList.toggle('armed', on);
+    $(id).setAttribute('aria-pressed', on);
+    $(id).textContent = on ? `${txt}: ON (release)` : txt;
+  }
+}
+
+async function loadProfiles() {
+  let profiles;
+  try { profiles = await (await api('/api/profiles')).json(); } catch { return; }
+  $('profile').innerHTML = '';
+  for (const p of profiles) {
+    const o = document.createElement('option');
+    o.value = p.name;
+    o.disabled = !!p.error;
+    o.textContent = p.error ? `${p.name} (invalid: ${p.error})` : `${p.name} · ${p.steps} steps · ${Math.round(p.totalSeconds)} s measuring`;
+    $('profile').append(o);
+  }
+}
+
+function cell(text) { const td = document.createElement('td'); td.textContent = text; return td; }
+
+// what this tab may press right now
+function allowed(need, d) {
+  const role = rank[d.user.role] ?? 0;
+  if (need === 'operator') return role >= 1;
+  if (need === 'control') return role >= 1 && d.control.youHaveControl;
+  if (need === 'engineer') return role >= 2 && d.control.youHaveControl;
+  return true;
+}
+
+function renderControls(d) {
+  const online = !d.error, s = d.sequence;
+  const active = s.state === 'Settling' || s.state === 'Dwelling';
+  for (const b of document.querySelectorAll('button[data-need]'))
+    b.disabled = !online || !allowed(b.dataset.need, d) || (b.hasAttribute('data-manual') && active);
+  if (!active) $('btnSeqHold').disabled = $('btnSeqAbort').disabled = true;
+  if (active) $('btnSeqStart').disabled = true;
+  $('profile').disabled = $('inDut').disabled = active || !d.control.youHaveControl;
+
+  const canOperate = (rank[d.user.role] ?? 0) >= 1;
+  const mine = d.control.youHaveControl;
+  $('controlText').textContent = mine ? 'You have control' : d.control.holder ? `${d.control.holder} has control (view only)` : 'Nobody has control';
+  $('btnControl').hidden = !canOperate;
+  $('btnControl').textContent = mine ? 'Release control' : 'Take control';
+  $('btnControl').dataset.release = mine ? '1' : '';
+  $('btnControl').disabled = !mine && !!d.control.holder;
+}
+
+function renderSequence(s) {
+  seq = s;
+  const active = s.state === 'Settling' || s.state === 'Dwelling';
+  $('btnSeqHold').textContent = s.held ? 'Resume' : 'Hold';
+  if (active) $('profile').value = s.profile;
+
+  let pct = 0;
+  if (active && s.step) {
+    const phase = s.held ? 'held' : s.state === 'Dwelling' ? `measuring ${s.dwellElapsed.toFixed(0)} / ${s.step.dwellSeconds} s` : 'settling to speed';
+    $('seqText').textContent = `${s.profile} on ${s.dutSerial}: step ${s.step.number}/${s.stepCount}, ${s.step.speedRpm} rpm at ${s.step.loadPct} % load, ${phase}`;
+    pct = ((s.step.number - 1) + (s.state === 'Dwelling' ? Math.min(s.dwellElapsed / s.step.dwellSeconds, 1) : 0)) / s.stepCount * 100;
+  } else if (s.state === 'Completed') {
+    $('seqText').textContent = `${s.profile} on ${s.dutSerial}: completed, ${s.results.length} steps measured.`;
+    pct = 100;
+  } else if (s.state === 'Aborted') {
+    $('seqText').textContent = `${s.profile} on ${s.dutSerial}: aborted, ${s.abortReason}`;
+  }
+  $('seqBar').style.width = pct + '%';
+  $('seqBar').style.background = s.state === 'Aborted' ? 'var(--fault)' : s.state === 'Completed' ? 'var(--run)' : 'var(--speed)';
+
+  const body = $('results');
+  if (body.childElementCount !== s.results.length) {
+    body.innerHTML = '';
+    for (const r of s.results) {
+      const tr = document.createElement('tr');
+      tr.append(cell(r.step.number), cell(r.step.speedRpm), cell(r.step.loadPct), cell(r.settleSeconds.toFixed(2)),
+        cell(r.avgSpeedRpm.toFixed(1)), cell(r.avgTorqueNm.toFixed(2)), cell(r.maxTempC.toFixed(1)));
+      body.append(tr);
+    }
+  }
+  if ($('report').dataset.name !== (s.report ?? '')) {
+    $('report').dataset.name = s.report ?? '';
+    if (s.report) loadRuns(); // a run just finished
+    $('report').innerHTML = '';
+    if (s.report) {
+      const a = document.createElement('a');
+      a.href = '/api/reports/' + encodeURIComponent(s.report);
+      a.textContent = `Download ${s.report}`;
+      $('report').append(a);
+    }
+  }
+}
+
+function link(file, text) {
+  const a = document.createElement('a');
+  a.href = '/api/reports/' + encodeURIComponent(file);
+  a.textContent = text;
+  return a;
+}
+
+async function loadRuns() {
+  let runs;
+  try { runs = await (await api('/api/runs')).json(); } catch { return; }
+  const body = $('runs');
+  body.innerHTML = runs.length ? '' : '<tr><td class="muted" colspan="7">No runs yet.</td></tr>';
+  for (const r of runs) {
+    const tr = document.createElement('tr');
+    const outcome = cell(r.outcome);
+    outcome.className = r.outcome === 'completed' ? 'ok' : 'bad';
+    const files = document.createElement('td');
+    files.append(link(r.report, 'results'));
+    if (r.rawData) files.append(link(r.rawData, 'raw data'));
+    tr.append(cell(new Date(r.finished).toLocaleString()), cell(r.profile), cell(r.dutSerial ?? '–'),
+      cell(r.operator ?? '–'), cell(r.steps), outcome, files);
+    body.append(tr);
+  }
+}
+
+let shownAlarms = '';
+function renderAlarms(list) {
+  const key = JSON.stringify(list);
+  if (key === shownAlarms) return;
+  shownAlarms = key;
+  const ul = $('alarms');
+  ul.innerHTML = list.length ? '' : '<li class="muted">No alarms.</li>';
+  for (const a of list) {
+    const li = document.createElement('li');
+    const time = document.createElement('span'); time.className = 'muted'; time.textContent = new Date(a.time).toLocaleTimeString();
+    const ev = document.createElement('span'); ev.className = a.raised ? 'raised' : 'cleared'; ev.textContent = a.raised ? 'RAISED' : 'cleared';
+    const txt = document.createElement('span'); txt.textContent = alarmText[a.code] ?? a.code;
+    li.append(time, ev, txt);
+    ul.append(li);
+  }
+}
+
+async function poll() {
+  try {
+    const d = await (await api('/api/status')).json();
+    $('conn').textContent = d.error ? d.error : `PLC: ${d.plc} · online`;
+    renderSequence(d.sequence);
+    renderControls(d);
+    renderAlarms(d.alarms);
+    const s = d.status;
+    if (!s) return;
+
+    $('state').textContent = s.state;
+    $('state').style.color = s.state === 'Fault' ? 'var(--fault)' : s.state === 'Running' ? 'var(--run)' : '';
+    $('speed').textContent = s.speedRpm;
+    $('speedSp').textContent = s.speedSetpointRpm;
+    $('torque').textContent = s.torqueNm.toFixed(1);
+    $('loadSp').textContent = s.loadSetpointPct;
+    $('temp').textContent = s.motorTempC.toFixed(1);
+    $('temp').style.color = s.motorTempC > 110 ? 'var(--fault)' : s.motorTempC > 90 ? 'var(--warn)' : '';
+    $('hb').textContent = s.heartbeat;
+    for (const k of ['driveEnable', 'brakeRelease', 'runLamp', 'faultLamp']) $(k).classList.toggle('on', s[k]);
+
+    const alarm = s.alarm !== 'None';
+    $('banner').style.display = alarm ? 'block' : 'none';
+    $('banner').textContent = alarm ? `ALARM: ${alarmText[s.alarm] ?? s.alarm}. Clear the cause, wait for the motor to stop, then Reset alarm.` : '';
+
+    const now = Date.now();
+    trend.push({ t: now, speed: s.speedRpm, sp: s.speedSetpointRpm, temp: s.motorTempC });
+    while (trend.length && trend[0].t < now - 60000) trend.shift();
+    draw(now);
+  } catch {
+    $('conn').textContent = 'Dashboard server not reachable';
+  } finally {
+    setTimeout(poll, 200);
+  }
+}
+
+function draw(now) {
+  const c = $('chart'), dpr = devicePixelRatio || 1;
+  const w = c.clientWidth, h = c.clientHeight;
+  c.width = w * dpr; c.height = h * dpr;
+  const g = c.getContext('2d');
+  g.scale(dpr, dpr);
+  const css = getComputedStyle(document.documentElement);
+  g.strokeStyle = css.getPropertyValue('--line');
+  g.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) { const y = Math.round(h * i / 4) + .5; g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke(); }
+  const x = t => w - (now - t) / 60000 * w;
+  const line = (key, max, color) => {
+    g.strokeStyle = css.getPropertyValue(color); g.lineWidth = 2; g.beginPath();
+    trend.forEach((p, i) => { const y = h - Math.min(p[key] / max, 1) * h; i ? g.lineTo(x(p.t), y) : g.moveTo(x(p.t), y); });
+    g.stroke();
+  };
+  line('sp', 3500, '--sp');
+  line('speed', 3500, '--speed');
+  line('temp', 150, '--temp');
+}
+
+async function init() {
+  try {
+    me = await (await fetch('/api/me')).json();
+    if (me.loginRequired && !me.user) { location.href = '/login.html'; return; }
+    if (me.loginRequired) {
+      $('who').textContent = `${me.user.name} (${me.user.role})`;
+      $('btnLogout').hidden = false;
+    }
+    // take control if nobody has it, so a single operator never has to think about it
+    if ((rank[me.user?.role] ?? 0) >= 1) await api('/api/control/take', {}).catch(() => {});
+  } catch {}
+  loadProfiles();
+  loadRuns();
+  poll();
+  api('/api/version').then(r => r.json())
+    .then(v => $('version').textContent = `Motor Bench ${v.version} · PLC register map v${v.registerMap}`).catch(() => {});
+}
+init();
+</script>
+</body>
+</html>

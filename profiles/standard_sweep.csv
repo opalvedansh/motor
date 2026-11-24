@@ -1,0 +1,10 @@
+# Speed / load sweep, 5 s of measurement per point
+speed_rpm,load_pct,dwell_s
+500,0,5
+1000,25,5
+1500,25,5
+1500,50,5
+2000,50,5
+2500,50,5
+3000,25,5
+1000,0,5

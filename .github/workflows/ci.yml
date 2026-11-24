@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      # builds every project, including the WinForms HMI (see Directory.Build.props)
+      - run: dotnet build MotorBench.sln -warnaserror
+      # style per .editorconfig; fix locally with `dotnet format`
+      - run: dotnet format MotorBench.sln --verify-no-changes --no-restore
+      - run: dotnet test MotorBench.sln --no-build --collect:"XPlat Code Coverage" --results-directory coverage
+      - name: Coverage summary
+        run: |
+          python3 - >> "$GITHUB_STEP_SUMMARY" <<'EOF'
+          import glob, xml.etree.ElementTree as ET
+          root = ET.parse(glob.glob("coverage/*/coverage.cobertura.xml")[0]).getroot()
+          print("| Project | Lines | Branches |\n|---|---:|---:|")
+          for p in [root, *root.iter("package")]:
+              name = p.get("name", "**Total**")
+              print(f"| {name} | {float(p.get('line-rate')):.1%} | {float(p.get('branch-rate')):.1%} |")
+          EOF
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage/*/coverage.cobertura.xml

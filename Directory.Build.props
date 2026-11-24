@@ -1,0 +1,8 @@
+<Project>
+  <PropertyGroup>
+    <!-- lets macOS/Linux (and CI) compile the WinForms app; it still only runs on Windows -->
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <!-- release builds override this from the git tag: -p:Version=1.2.3 -->
+    <Version>0.0.0-dev</Version>
+  </PropertyGroup>
+</Project>

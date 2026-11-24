@@ -1,0 +1,5 @@
+# Short run to check the bench after start-up
+speed_rpm,load_pct,dwell_s
+500,0,3
+1500,20,3
+3000,20,3

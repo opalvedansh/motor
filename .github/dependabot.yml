@@ -1,0 +1,23 @@
+version: 2
+updates:
+  - package-ecosystem: nuget
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      aspnetcore:
+        patterns: ["Microsoft.AspNetCore.*", "Microsoft.Extensions.*"]
+      test-tools:
+        patterns: ["xunit*", "Microsoft.NET.Test.Sdk", "coverlet.*"]
+    ignore:
+      # major versions follow .NET releases; move the target framework on purpose, not via a bot
+      - dependency-name: "Microsoft.*"
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
