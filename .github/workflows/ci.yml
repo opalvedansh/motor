@@ -11,8 +11,8 @@ jobs:
   build-and-test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.x
       # builds every project, including the WinForms HMI (see Directory.Build.props)
@@ -30,7 +30,7 @@ jobs:
               name = p.get("name", "**Total**")
               print(f"| {name} | {float(p.get('line-rate')):.1%} | {float(p.get('branch-rate')):.1%} |")
           EOF
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: coverage
           path: coverage/*/coverage.cobertura.xml
